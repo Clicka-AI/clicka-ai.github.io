@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>clíckā-ai</title>
+<style>
+:root{--bg:#fff;--fg:#111;--bar:#000;--barfg:#fff;--hd:#3a3a3a;--hdfg:#fff;--lab:#e4e4e4;--bd:#bbb;--note:#f2f2f2;--mut:#555;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#121212;--fg:#eee;--bar:#000;--barfg:#fff;--hd:#555;--lab:#2a2a2a;--bd:#555;--note:#1e1e1e;--mut:#aaa}}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.45 Georgia,"Times New Roman",serif}
+main{max-width:640px;margin:0 auto;padding:12px}
+.bar{background:var(--bar);color:var(--barfg);border-radius:12px;padding:10px 14px;font-weight:bold;margin:14px 0 8px}
+h1.bar{font-size:18px;margin-top:4px}
+input,select{box-sizing:border-box;padding:10px;font:inherit;border:1.5px solid var(--bd);border-radius:10px;background:var(--bg);color:var(--fg)}
+#q{width:100%}
+.item{display:block;width:100%;text-align:left;background:var(--lab);color:var(--fg);border:0;border-radius:10px;padding:12px;margin:8px 0;font:inherit;cursor:pointer}
+.item small{display:block;color:var(--mut)}
+.back{background:none;border:0;color:var(--fg);font:inherit;text-decoration:underline;padding:8px 0;cursor:pointer}
+.pt{background:var(--lab);border-radius:12px;padding:10px;display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.pt b{width:100%}.pt input{width:90px}
+.wrap{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:14px;margin-bottom:6px}
+th{background:var(--hd);color:var(--hdfg);text-align:left}
+th,td{border:1px solid var(--bd);padding:6px 7px;vertical-align:top}
+td.l{background:var(--lab);font-weight:bold}
+td.sep{text-align:center;font-weight:bold;background:var(--note)}
+td.d{white-space:pre-line}
+.calc{display:block;margin-top:6px;padding:4px 6px;border:1.5px solid var(--fg);border-radius:6px;font-weight:bold;white-space:normal}
+.calc:empty{display:none}
+.note{background:var(--note);border:1px solid var(--bd);border-radius:8px;padding:8px 10px;margin:8px 0;font-size:14px}
+.src{color:var(--mut);font-size:12px;margin:0 0 10px}
+.ft{color:var(--mut);font-size:12px;margin:24px 0 8px}
+dialog{background:var(--bg);color:var(--fg);border:2px solid var(--fg);border-radius:12px;max-width:min(92vw,440px);padding:14px}dialog::backdrop{background:rgba(0,0,0,.5)}
+.dx{font:inherit;font-size:12px;border:1.5px solid var(--fg);border-radius:6px;background:var(--bg);color:var(--fg);padding:2px 6px;margin:4px 4px 0 0;cursor:pointer}
+</style><link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#000000">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="clíckā-ai">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+</head><body><main id="app"></main><dialog id="dg"></dialog>
+<script>
+/* DATA MODEL
+ Condition -> groups (a titled table) -> regimens (medicine + route + codes + verbatim book text + calc rule + source).
+ calc: {k:"mgkg",lo,hi,u,dp}  weight x dose per kg
+       {k:"wt"|"age",b:[[from,to,label,flags]]}  band lookup (wt in kg, age in months); flags: "o"=lower bound open (>), "i"=upper bound inclusive */
+const SRC="EDLIZ 2025, ch. 3 Paediatric Conditions";
+const H=["Medicine","Codes","Paediatric dose","Frequency","Duration"];
+const R=(m,r,k,d,f,u,c)=>({m,r,k,d,f,u,c});
+const PARA=R("paracetamol","po","C N","10mg/kg","6 hourly","as required",{k:"mgkg",lo:10,u:"mg"});
+const PROC=(t,x)=>R("procaine penicillin","im","C V",t,x,"5 days",{k:"age",b:[[0,12,"150 mg"],[12,36,"300 mg"],[36,60,"450 mg"]]});
+const D=[
+{id:"pneumonia",name:"Pneumonia",sec:"Acute respiratory infections",blocks:[
+ {t:'m',title:'Classification of pneumonia',cols:['Signs','Classify as','Treatment'],note:'Urgent pre-referral treatments are in bold print.',rows:[
+ [['Any general danger sign','or','chest indrawing','or','stridor in a calm child'],['Severe pneumonia','or','very severe disease'],['**• Give first dose of an appropriate antibiotic (Benzylpenicillin and gentamicin)','**• Treat to prevent low blood sugar (see below)','**• Keep the child warm','**• Treat wheeze if present','**• Refer URGENTLY to hospital']],
+ [['Fast breathing'],['Pneumonia'],['**• Give an appropriate antibiotic for 5 days','• Treat wheeze if present','• Advise mother to return immediately if condition worsens','• Follow-up in 2 days']],
+ [['No signs of pneumonia or of very severe disease'],['No pneumonia: cough or cold'],['• If coughing more than 21 days, refer for assessment','**• Treat wheeze if present','• Advise mother to return immediately if condition worsens','• Follow-up in 7 days if not improving']]]},
+ {t:"h",x:"Cough / difficult breathing (no pneumonia)"},
+ {t:"p",x:"Home care and instructions on when to return are all that are needed. No antibiotics, antihistamines or cough mixtures are required."},
+ {t:"g",title:"If the temperature is above 37.5˚C:",rows:[PARA],note:"Do not give paracetamol to children under 3 months of age due to liver immaturity, if indicated give cautiously."},
+ {t:"h",x:"Management of pneumonia"},
+ {t:"g",title:"First line:",rows:[R("amoxicillin","po","C V","4 – <6kg = 62.5mg\n6 – <14kg = 125mg\n14 – 19kg = 250mg","3 times a day","5 days",{k:"wt",b:[[4,6,"62.5 mg"],[6,14,"125 mg"],[14,19,"250 mg","i"]]}),"OR",
+  {...PROC("<1yr = 150mg\n1 – 3yrs = 300mg\n3 – 5yrs = 450mg","once a day"),d:"<1yr = 150mg\n1 – 3yrs = 300mg\n3 – 5yrs = 450mg"}],note:"Reassess after 2 days of antibiotic treatment. If not responding then refer, as the second line choices are limited."},
+ {t:"g",title:"Treat fever and pain, if present with:",rows:[{...PARA,r:"po/iv"}]},
+ {t:"h",x:"Management of severe pneumonia"},
+ {t:"p",x:"Give first dose of intramuscular benzylpenicillin and gentamicin and refer child urgently to hospital. If referral not possible repeat the benzylpenicillin 6 hourly and gentamicin once daily."},
+ {t:"g",title:"First line treatment for severe pneumonia:",rows:[R("benzylpenicillin","im","C V","0.05–0.1MU/kg","6 hourly","10 days",{k:"mgkg",lo:.05,hi:.1,u:"MU",dp:3}),"AND",R("gentamicin","","C V","5–7mg/kg","once daily","10 days",{k:"mgkg",lo:5,hi:7,u:"mg"})],note:"Change to oral amoxicillin when patient improves and tolerates oral drugs. If less than 6 months add high dose cotrimoxazole for 21 days and check HIV status. In HIV positive children consider steroids."},
+ {t:"g",title:"Alternative treatment for severe pneumonia (if benzylpenicillin is not available):",rows:[R("ampicillin","iv","B E","50-75mg/kg","6 hourly","5 days",{k:"mgkg",lo:50,hi:75,u:"mg"}),"AND",
+  R("procaine penicillin","im","C V","<1yr = 150mg (½ml)\n1 – 3yrs = 300mg (1ml)\n3 – 5yrs = 450mg (1½ml)","once daily","5 days",{k:"age",b:[[0,12,"150 mg (½ml)"],[12,36,"300 mg (1ml)"],[36,60,"450 mg (1½ml)"]]})],note:"Change to oral amoxicillin when patient improves and tolerates oral drugs. If less than 6 months add high dose cotrimoxazole for 21 days and check HIV status. In HIV positive children consider steroids."}
+]},
+{id:"wheezing",name:"Wheezing",sec:"Acute respiratory infections",blocks:[
+ {t:'m',li:0,title:'Children with first episode of wheezing',cols:['','Child under 1 year','Child 1 year and over'],rows:[
+ [['• Chest indrawing or any danger sign'],['Give first dose of benzyl penicillin and refer urgently to hospital.'],['Nebulise with salbutamol*, give oral prednisolone and antibiotic.','Refer urgently to hospital.']],
+ [['• Fast breathing'],['Give first dose of benzyl penicillin and refer urgently to hospital.'],['Nebulise with salbutamol or give oral bronchodilator*.','Send home on treatment as “pneumonia”.','Follow up in 2 days.']],
+ [['• No fast breathing'],['Treat as “no pneumonia, cough/cold”.','Follow up after 2 days.'],['Nebulise with salbutamol or give oral bronchodilator*.','Send home on treatment as “no pneumonia, cough/cold”.','Follow up in 7 days.']]]},
+ {t:'m',li:0,title:'Children with previous episodes of wheezing',cols:['','Child under 1 year','Child 1 year and over'],note:'* Assess the child’s condition 30 minutes later and treat according to this assessment.',rows:[
+ [['• Chest indrawing or any danger sign'],['Nebulise with salbutamol or give oral bronchodilator*.','Give first dose of antibiotic.','Refer urgently to hospital.'],['Nebulise with salbutamol*.','Give first dose of antibiotic and prednisolone.','Refer urgently to hospital.']],
+ [['• Fast breathing'],['Nebulise with salbutamol or give oral bronchodilator*.','Send home on treatment as “pneumonia”.','Follow up in 2 days.'],['Give oral bronchodilator*.','Send home on treatment as “pneumonia”.','Follow up in 2 days.']],
+ [['• No fast breathing'],['Nebulise with salbutamol or give oral bronchodilator*.','Send home on treatment as “no pneumonia, cough/cold”.','Follow up in 7 days.'],['Give oral bronchodilator*.','Send home on treatment as “no pneumonia, cough/cold”.','Follow up in 7 days.']]]},
+ {t:"ul",x:["In a young infant below 2 months, wheeze is a sign of serious illness – refer.","An infant between 2 months and 12 months may wheeze because of bronchiolitis, which is usually a viral infection. If a child with bronchiolitis is breathing fast, refer. If not, give home care.","In a child more than one year wheezing may be due to asthma. If it is the first episode refer. If this child is in distress, give a rapid-acting bronchodilator for example salbutamol and refer."]},
+ {t:"g",title:"Prednisolone dose in wheezing:",rows:[R("prednisolone","po","B V","<1yr = 10mg\n>1yr = 20mg","once","repeat in 6 hours if required",{k:"age",b:[[0,12,"10 mg"],[12,999,"20 mg"]]})]},
+ {t:"g",title:"If a rapid acting bronchodilator is required:",rows:[R("salbutamol","nebulized (5mg/ml in 2ml sterile water)","B V","<1yr = 2.5mg\n>1yr = 5mg","as required","",{k:"age",b:[[0,12,"2.5 mg"],[12,999,"5 mg"]]}),"OR",R("salbutamol","syrup po","B V","2 – 12 months = 1mg\n1 – 5yrs = 2mg","3 times a day","",{k:"age",b:[[2,12,"1 mg"],[12,60,"2 mg"]]}),"OR",R("adrenaline","subcutaneously 1:1000","C V","0.01ml/kg up to a max of 0.25ml","repeat after 20mins if required","",{k:"mgkg",lo:0.01,u:"ml",mx:0.25,dp:3})],note:"If asthma is suspected refer to Asthma section for detailed management."}
+]}];
+const AW=[[4,6,"62.5 mg"],[6,14,"125 mg"],[14,19,"250 mg","i"]];
+const PA=m=>[[0,12,"150 mg"+(m?" (½ml)":"")],[12,36,"300 mg"+(m?" (1ml)":"")],[36,60,"450 mg"+(m?" (1½ml)":"")]];
+const GEN=(r,f,u)=>R("gentamicin",r,"C V","5–7mg/kg",f,u,{k:"mgkg",lo:5,hi:7,u:"mg"});
+const CLOX=(r,d,f,u,lo,hi)=>R("cloxacillin",r,"B V",d,f,u,{k:"mgkg",lo,hi,u:"mg"});
+D.push(
+{id:"stridor",name:"Stridor and croup",sec:"Acute respiratory infections",blocks:[
+ {t:"p",x:"Definition: harsh noise made when a child breathes in."},
+ {t:"h",x:"Management of croup at the primary level"},
+ {t:"p",x:"If no stridor at rest, do not give antibiotics. If there is stridor at rest or chest indrawing or fast breathing refer urgently to hospital for possible intubation or tracheostomy and a course of cloxacillin and chloramphenicol."},
+ {t:"h",x:"Mild croup"},{t:"p",x:"Stridor present only when upset. Likely to be of viral origin. An antibiotic is not required. Home care."},
+ {t:"h",x:"Severe croup (laryngotracheobronchitis)"},{t:"p",x:"This is stridor in a calm child at rest with chest indrawing."},
+ {t:"ul",x:["Refer to higher centre of care.","Do not examine the throat in case it’s epiglottitis!","If referral not possible or there is a delay give chloramphenicol (or ceftriaxone) and cloxacillin:"]},
+ {t:"g",title:"Treatment for severe croup:",rows:[R("chloramphenicol","iv","B V","12.5mg/kg","6 hourly","7 days",{k:"mgkg",lo:12.5,u:"mg"}),"OR",R("ceftriaxone","iv","C V","50mg/kg","once a day","7 days",{k:"mgkg",lo:50,u:"mg"}),"AND",CLOX("iv","12.5–25mg/kg","6 hourly","7 days",12.5,25)],note:"Chloramphenicol is preferred; ceftriaxone is the alternative where chloramphenicol is not available.",d:"croup-alt"},
+ {t:"ul",x:["Suspect epiglottitis if child very ill, toxic and drooling saliva.","Continue antibiotics.","Watch carefully for signs of obstruction. Intubation or a tracheostomy may be required (poor air entry; severe chest indrawing, restlessness, pallor).","Minimal handling (keep on mother’s lap).","NB. Remember cyanosis is a very late sign."]}]},
+{id:"foreign-body",name:"Foreign body",sec:"Acute respiratory infections",blocks:[
+ {t:"p",x:"Common in age 1-2 years: sudden onset (choking); sometimes local wheeze and/or decreased air entry. May cause stridor/cough; there is usually a history that suggests inhalation of foreign body."},
+ {t:"ul",x:["Admit for bronchoscopy to remove the foreign body.","X-ray: opacity and/or air trapping.","Use antibiotics if there is fast breathing (secondary infection).","Whenever foreign body is suspected consult cardiothoracic surgeons."]}]},
+{id:"abscess",name:"Abscess (retropharyngeal and lung)",sec:"Acute respiratory infections",blocks:[
+ {t:"h",x:"Retropharyngeal abscess"},{t:"p",x:"Surgical drainage is required. Give:"},
+ {t:"g",title:"Retropharyngeal abscess:",rows:[CLOX("im/iv","25mg/kg/dose","6 hourly","7 days",25),"AND",R("gentamicin","im/iv","C V","6mg/kg","24 hourly","7 days",{k:"mgkg",lo:6,u:"mg"})]},
+ {t:"g",title:"Lung abscess",rows:[CLOX("iv/im/po","12.5–25mg/kg","6 hourly","6 weeks",12.5,25),"AND",GEN("im/iv","24 hourly","14 days")]}]},
+{id:"diphtheria",name:"Diphtheria",sec:"Acute respiratory infections",blocks:[
+ {t:"p",x:"Give antitoxin and:"},
+ {t:"g",title:"Diphtheria:",rows:[R("benzyl penicillin","im","C V","100 000 unit/kg per dose","6 hourly","7 days",{k:"mgkg",lo:100000,u:"units"})]}]},
+{id:"pertussis",name:"Pertussis",sec:"Acute respiratory infections",blocks:[
+ {t:"g",title:"Pertussis",rows:[R("erythromycin","po","C V","12.5mg/kg/dose","6 hourly","10 days",{k:"mgkg",lo:12.5,u:"mg"})]}]},
+{id:"ear",name:"Ear problems",sec:"Ear, nose and throat",blocks:[
+ {t:"p",x:"See also chapter on Ear, Nose and Throat Disorders."},
+ {t:"h",x:"Precautions for a child with a draining ear"},
+ {t:"ul",x:["Advise the mother not to leave anything in the ear, such as cotton wool, between wicking treatments.","Not to put oil or any fluid into the ear.","Not to let the child go swimming or get water in the ear."]},
+ {t:"h",x:"Mastoiditis"},{t:"p",x:"Tender swelling behind the ear. Give first dose of antibiotics, paracetamol for pain and refer to hospital."},
+ {t:"g",title:"Mastoiditis:",rows:[R("benzylpenicillin","im","C V","0.05-0.1MU/kg","6 hourly","10 days",{k:"mgkg",lo:0.05,hi:0.1,u:"MU",dp:3}),"AND",GEN("im","24 hourly","treat to effect"),"AND",PARA]},
+ {t:"h",x:"Acute ear infection"},{t:"p",x:"Pus is seen draining from the ear and discharge is reported for less than 14 days; or ear pain."},
+ {t:"g",title:"Give antibiotics and analgesia:",rows:[R("amoxicillin","po","C V","4 – <6kg = 62.5mg\n6 – <14kg = 125mg\n14 – 19kg = 250mg","3 times a day","5 days",{k:"wt",b:AW}),"AND",PARA]},
+ {t:"ul",x:["Use amoxicillin as first line in children on cotrimoxazole prophylaxis.","Dry the ear by wicking.","Follow-up for 5 days."]},
+ {t:"h",x:"Chronic ear infection"},{t:"p",x:"Pus is seen draining from the ear and discharge is reported for 14 days or more."},
+ {t:"ul",x:["Dry the ear by wicking.","Instill quinolone drops (such as ciprofloxacin, norfloxacin, or ofloxacin).","Follow-up after 5 days then reassess.","If not improving, refer to ENT specialist."]}]},
+{id:"sore-throat",name:"Sore throat, thrush and blocked nose",sec:"Ear, nose and throat",blocks:[
+ {t:"p",x:"Antibiotics are only needed for streptococcal sore throats to prevent complications such as rheumatic fever. A streptococcal sore throat presents as tender enlarged lymph nodes in front of the neck and a white exudate on the tonsils."},
+ {t:"h",x:"Sore throat but no swollen tender glands in neck and no pus on tonsils"},
+ {t:"ul",x:["No antibiotics.","Give paracetamol for pain.","Feed child normally, continue breastfeeding.","Give plenty of fluids."]},
+ {t:"h",x:"Sore throat with swollen tender glands in neck or pus on tonsils (all ages)",d:"ss-age"},
+ {t:"g",title:"Give antibiotic:",rows:[R("procaine penicillin","im","C V","<1yr = 150mg (½ml)\n1 – 3yrs = 300mg (1ml)\n3 – 5yrs = 450mg (1½ml)","once a day","5 days",{k:"age",b:PA(1)}),"THEN",R("amoxicillin","po","C V","<1yr = 62.5mg\n1 – 3yrs = 125mg\n3 – 5yrs = 250mg\n5 – 12yrs = 375mg\n>12yrs = 500mg","3 times a day","5 days",{k:"age",b:[[0,12,"62.5 mg"],[12,36,"125 mg"],[36,60,"250 mg"],[60,144,"375 mg"],[144,999,"500 mg"]]})],note:"Give paracetamol for pain."},
+ {t:"h",x:"Treatment of oral candidiasis (thrush)"},
+ {t:"g",title:"Oral candidiasis (thrush):",rows:[R("miconazole 2% gel","po","C V","2.5ml after feeds","once","7 days",null)]},
+ {t:"h",x:"Child with a blocked nose or nasal discharge"},
+ {t:"p",x:"For clear or mucous nasal discharge, do not give antibiotics; keep nose clean with wet soft tissue or cloth and normal saline nasal drops. For a foreign body in nose refer to hospital/admit for removal."}]}
+);
+const CIP=()=>R('ciprofloxacin','po','B V','6mo–5yrs=10mg/kg\n5–17yrs=15mg/kg\n(max 1.5gm/day)','twice a day','3 days',{k:'mgkg',u:'mg',mx:750,ab:[[6,60,10],[60,204,15]]});
+D.push(
+{id:'diarrhoea',name:'Diarrhoea: assessment and persistent diarrhoea',sec:'Diarrhoea in children',blocks:[
+ {t:'p',x:'About 90% of deaths from diarrhoea in under-fives would be prevented by:'},
+ {t:'ul',x:['giving extra home fluids or salt sugar solution (SSS) or ORS at home at onset of diarrhoea to prevent dehydration;','exclusive breastfeeding for first 6 months of life and continuing breast feeding with solids throughout the attack of diarrhoea to prevent malnutrition;','making sure mothers know when to take the child to a health facility;','correct assessment, treatment and continued feeding at the health facility level (see MoHCC Chart and IMNCI Manual);','treatment of invasive diarrhoea (bloody stool) with antibiotics;','clear instructions on discharge from the health facility for continuing above treatments and when it may be necessary to return for further treatment;','referring to hospital for investigation and treatment: severe malnutrition, persistent diarrhoea (lasting ≥ 14 days);','appropriate use of antibiotics, no anti-diarrhoeal or anti-emetic medicines;','zinc sulphate 20mg/day for 10-14 days to all children ≥ 6months and 10mg/day to infants less than 6 months.'],d:'persist-14'},
+ {t:'h',x:'If the child has diarrhoea, ask:'},{t:'ul',x:['For how long?','Is there blood in the stool?']},
+ {t:'h',x:'Look:'},{t:'ul',x:['Is the child lethargic or unconscious?','Does the child have sunken eyes?','Is the child able to drink or drinking poorly?','Is the child drinking eagerly or thirsty?']},
+ {t:'h',x:'Pinch the skin of the abdomen:'},{t:'p',x:'Does it go back very slowly (longer than 2 seconds)? Classify the dehydration using the table below.'},
+ {t:'m',title:'Classification of dehydration',cols:['Signs','Dehydration','Management'],rows:[
+ [['Two or more of the following signs:','• Lethargic or unconscious','• Sunken eyes','• Not able to drink or drinking poorly','• Skin pinch goes back very slowly'],['Severe dehydration'],['• Initiate treatment for severe dehydration (Plan C).','• Or if another severe classification*, refer urgently to hospital with caregiver giving frequent sips of oral rehydration fluid or by nasogastric tube on the way. Advise mother to continue breastfeeding.','• If the child is 2 years or older and there is cholera in your area, give antibiotic for cholera.']],
+ [['Two or more of the following signs:','• Restless or irritable','• Sunken eyes','• Drinks eagerly or thirsty','• Skin pinch goes back slowly'],['Some dehydration'],['Give fluid and food for some dehydration (Plan B).','• If the child also has a severe classification* from another main symptom, refer urgently to hospital with caregiver giving frequent sips of oral rehydration fluid on the way. Advise mother to continue breastfeeding.','• Advise mother when to return urgently.','• Follow-up in 2 days if not improving.']],
+ [['Not enough signs to classify as ‘some’ or severe dehydration.'],['No dehydration'],['• Give fluid and food to treat diarrhoea at home (Plan A).','• Advise caregiver when to return immediately.','• Follow-up in 2 days if not improving.']]],note:'* e.g. severe pneumonia, severe febrile disease, severe malnutrition'},
+ {t:'p',x:'NB: If temperature is 38.5°C or higher look for other causes of fever and treat.'},
+ {t:'h',x:'Persistent diarrhoea'},
+ {t:'ul',x:['Severe persistent diarrhoea is diarrhoea lasting 14 days or more and dehydrated. Start rehydration and refer to hospital.','Persistent diarrhoea is diarrhoea lasting 14 days or more but no dehydration. Advise on feeding (below), give vitamin A, and follow up in 5 days.']},
+ {t:'h',x:'General notes: persistent diarrhoea'},
+ {t:'ul',x:['if breastfeeding, give more frequent, longer breast feeds, day and night','milk feeds should be mixed with maize meal porridge to reduce the concentration of lactose','sour milk is better tolerated than fresh milk','give fermented porridge if available','give foods rich in vitamin A, folic acid and zinc – liver, kidney, dark green vegetables, fish, beans, groundnuts, breast milk, or vitamin supplements.']}]},
+{id:'dysentery-cholera',name:'Bloody diarrhoea (dysentery) and cholera',sec:'Diarrhoea in children',blocks:[
+ {t:'h',x:'Indications for antibiotics: bloody diarrhoea, cramps and fever (dysentery)'},
+ {t:'g',title:'First line:',rows:[CIP(),'OR',R('nalidixic acid','po','B V','<1yr = 62.5mg\n1 – <5yrs = 125mg\n5 – <10yrs = 250mg\n10 – 17yrs = 375mg','4 times a day','5 days',{k:'age',b:[[0,12,'62.5 mg'],[12,60,'125 mg'],[60,120,'250 mg'],[120,204,'375 mg','i']]})],note:'Patients with HIV may require 7 to 10 days of therapy, and if there is bacteremia, they may require 2-6 weeks.'},
+ {t:'p',x:'Follow up after 2 days.'},
+ {t:'g',title:'Second line (intestinal amoebiasis):',rows:[R('metronidazole','po','C V','10mg/kg','3 times a day','5 days',{k:'mgkg',lo:10,u:'mg'})]},
+ {t:'h',x:'Cholera'},{t:'p',x:'Case definition: rice watery diarrhoea, with or without vomiting, causing severe dehydration or death. In suspected cases immediately notify the Provincial Medical Director and obtain current cholera guidelines. See also the chapter on gastrointestinal conditions.'},
+ {t:'ul',x:['Rehydration is most important. The mainstay of cholera management is rehydration, intravenously or orally.','The use of antibiotics is strictly limited to very few indications such as: severe dehydration; high attack rate within a household or congregate settings; as prophylaxis in high-risk areas; if specific guidance is provided as part of the cholera response.','Start antibiotics after the patient is rehydrated and vomiting has stopped – usually after 4-6hrs.','Always confirm recommended medicines for the outbreak.']},
+ {t:'g',title:'Cholera antibiotics:',rows:[CIP(),'OR',R('azithromycin','po','C V','20mg/kg','single dose','',{k:'mgkg',lo:20,u:'mg'})]}]},
+{id:'fluids-zinc',name:'Composition of fluids and zinc',sec:'Diarrhoea in children',blocks:[
+ {t:'h',x:'Sugar salt solution (SSS)'},
+ {t:'ul',x:['6 level teaspoons of any household sugar (white or brown),','½ level teaspoon of salt (coarse salt may have to be ground fine), dissolved in','1000ml of clean water measured in any 1000ml bottle (soft drink, oil etc). [The water is boiled only if from a contaminated source and is cooled before adding ingredients.]']},
+ {t:'h',x:'‘Home fluids’'},{t:'p',x:'Any fluids including water, tea, thin porridge, ‘mahewu’, but avoiding cold drinks with high sugar content.'},
+ {t:'h',x:'Oral rehydration solution (ORS)'},{t:'p',x:'Full formula has now been replaced with low osmolarity ORS formula. It has low levels of glucose and salt to achieve osmolarity of 245mOsm/L resulting in improved efficacy and decreased stool output. It is safe and effective even in children with cholera. Made in hospital pharmacies; however, ORS may be available in packets (sachets) in certain situations according to current ministry policy.'},
+ {t:'m',li:0,title:'Low osmolarity ORS',cols:['Ingredient','Weight'],rows:[[['Sodium chloride'],['2.6 g']],[['Trisodium citrate dihydrate*'],['2.9 g']],[['Potassium chloride'],['1.5 g']],[['Glucose, anhydrous'],['13.5 g']],[['Water'],['to 1 litre']]],note:'*Trisodium citrate dihydrate may be replaced by sodium bicarbonate 2.5 grams/litre.'},
+ {t:'h',x:'Zinc sulphate'},{t:'p',x:'Give zinc sulphate 20mg/day for 10-14 days with every bout of diarrhoea in infants 6 months and above. Give 10mg/day in infants below 6 months.'},
+ {t:'g',title:'Zinc sulphate:',rows:[R('zinc sulphate','','C V','≥6 months = 20mg/day\n<6 months = 10mg/day','once a day','10-14 days',{k:'age',b:[[0,6,'10 mg/day'],[6,999,'20 mg/day']]})]}]}
+);
+const MA=(n,m)=>[[12,24,'200 mg'],[24,999,'400 mg']];
+D.push(
+{id:'mal-hypo',name:'Acute malnutrition: hypoglycaemia and infection',sec:'Acute malnutrition',blocks:[
+ {t:'p',x:'Patients with severe or moderate acute malnutrition AND complications should be admitted for inpatient care. Complications should be managed according to national protocols for different age groups.'},
+ {t:'h',x:'Treatment of hypoglycaemia in severe acute malnutrition'},
+ {t:'p',x:'Hypoglycaemia and hypothermia usually occur together and are signs of infection. Check for hypoglycaemia (blood glucose < 3mmol/l) whenever hypothermia (axillary <35.0°C; rectal <35.5°C) is found. Frequent feeding is important in preventing both conditions.'},
+ {t:'g',title:'If the child is conscious and has hypoglycaemia give:',rows:[R('10% glucose solution','','C E','50ml bolus','once','',null),'OR',R('10% sucrose solution','','C E','3ml/kg/feed','every 30 minutes','2 hours',{k:'mgkg',lo:3,u:'ml'}),'THEN',R('F-75','','C E','11ml/kg/feed','2 hourly','2 days',{k:'mgkg',lo:11,u:'ml'})]},
+ {t:'p',x:'The glucose or sucrose solution (1 rounded teaspoon of sugar in 3.5 tablespoons water) can be given orally or by nasogastric (NG) tube. If the child is unconscious, lethargic or convulsing give IV sterile 10% glucose (5ml/kg), followed by 50ml of 10% glucose or sucrose by NG tube. Then give starter F-75.'},
+ {t:'h',x:'Treatment of infection in severely malnourished children'},
+ {t:'p',x:'The usual signs of infection, such as fever, are often absent in severe malnutrition. Therefore, presume infection in severe malnutrition and give routinely broad-spectrum antibiotic(s) AND measles-rubella vaccine if child is > 9 months and not immunized (delay if the child is in shock). If the child has no complications, give amoxicillin orally:'},
+ {t:'g',title:'No complications:',rows:[R('amoxicillin','po','C V','15mg/kg','8 hourly','5 days',{k:'mgkg',lo:15,u:'mg'})]},
+ {t:'p',x:'If the child is severely ill (apathetic, lethargic) or has complications (hypoglycaemia, hypothermia, raw skin/fissures, respiratory tract or urinary tract infection) start with an iv/im penicillin (e.g. ampicillin) before transitioning to an oral penicillin. Combine the penicillins with gentamicin for synergy.'},
+ {t:'g',title:'If the child is seriously unwell give:',rows:[R('ampicillin','im/iv','C V','50mg/kg','6 hourly','2 days',{k:'mgkg',lo:50,u:'mg'}),'THEN',R('amoxicillin','po','C V','15mg/kg','8 hourly','5 days',{k:'mgkg',lo:15,u:'mg'}),'AND',R('gentamicin','im/iv','C V','5–7mg/kg','once daily','7 days',{k:'mgkg',lo:5,hi:7,u:'mg'})],note:'Give benzylpenicillin if ampicillin is not available. If amoxicillin is not available continue with ampicillin but give orally 50mg/kg every 6 hours.'},
+ {t:'g',title:'If the child fails to improve after 48 hours or if sepsis/septic shock are present give:',rows:[R('ceftriaxone','im/iv','C V','50mg/kg','once daily','5 days',{k:'mgkg',lo:50,u:'mg'}),'OR',R('cefuroxime','im/iv','B N','10–20mg/kg','8–12 hourly','5 days',{k:'mgkg',lo:10,hi:20,u:'mg'}),'AND',R('ciprofloxacin','iv/po','B V','10-15mg/kg','12 hourly','5 days',{k:'mgkg',lo:10,hi:15,u:'mg'})]},
+ {t:'g',title:'If the child has suspected staphylococcal infection:',rows:['ADD',R('cloxacillin','iv','B V','25–50mg/kg','6 hourly','7 days',{k:'mgkg',lo:25,hi:50,u:'mg'})]},
+ {t:'g',title:'If the child has chronic diarrhoea:',rows:['ADD',R('metronidazole','iv/po','C V','5–10mg/kg','8 hourly','7 days',{k:'mgkg',lo:5,hi:10,u:'mg'})]},
+ {t:'g',title:'If the child has parasitic worms give:',rows:['ADD',R('albendazole','po','C V','1–2yr=200mg\n>2yr=400mg','once only','',{k:'age',b:MA()})]}]},
+{id:'mal-fluids',name:'Acute malnutrition: dehydration and supplements',sec:'Acute malnutrition',blocks:[
+ {t:'h',x:'Treatment of dehydration in severely malnourished children'},
+ {t:'p',x:'Dehydration can be considered when the following signs are present: reduced urine output, thirst, rapid pulse, fast respirations. Signs used in well-nourished children (sunken eyes, slow skin pinch, absent tears or dry mouth) are unreliable in severe malnutrition and should be used for monitoring the response to rehydration therapy, rather than for diagnosis.'},
+ {t:'p',x:'If signs of shock are present (cold peripheries, weak/thready pulse, prolonged capillary refill time): put the child on oxygen; give 10% dextrose at 5ml/kg IV; give a bolus of IV fluid at 15ml/kg over 1 hour using half-strength Darrow’s solution with 5% dextrose, Ringer’s lactate with 5% dextrose, or 0.45% saline with 5% dextrose; the bolus can be repeated if necessary; if there is no improvement after the second bolus, put the child on maintenance fluids and continue treatment for septic shock.'},
+ {t:'ul',x:['Do not use the IV route for rehydration except in cases of shock and then do so with care, infusing slowly to avoid flooding the circulation and overloading the heart.','Do not give standard oral rehydration salts solution (90 mmol sodium/l) in severely malnourished children as it contains too much sodium and too little potassium.']},
+ {t:'g',title:'Give special Rehydration Solution for Malnutrition (ReSoMal):',rows:[R('ReSoMal','','C E','5ml/kg bolus then','every 30 minutes','2 hours',{k:'mgkg',lo:5,u:'ml'}),R('','','','5–10ml/kg/hr','determined by stool loss, vomiting and how much the child wants','4–10hrs',null)],note:'If F-75 is available and rehydration is to continue beyond 4 hours, then replace some of the ReSoMal doses with F-75 as follows: give an equivalent volume of F-75 at 4, 6, 8 and 10 hours. At 10 hours, continue feeding with F-75 using recommended feeding volumes and frequencies.'},
+ {t:'h',x:'Supplements in malnutrition: anaemia'},
+ {t:'ul',x:['Children with SAM (kwashiorkor or marasmus) should be assumed to be severely anaemic.','However, oral iron supplementation should be delayed until the child regains appetite and starts gaining weight, usually after 14 days.','Provide 3 months of therapeutic supplementation, then switch to a preventive supplementation regimen.','Test and treat for hookworm (see Tropical Diseases). After recovery from the acute state treat with ferrous sulphate.']},
+ {t:'g',title:'Vitamin therapy in SAM (initiate at day 14 of rehabilitation):',rows:[R('vitamin A','po','C V','<6mths=50,000IU\n6–12mths=100,000IU\n1–5yr=200,000IU','once at the clinic and once at home','2 doses only',{k:'age',b:[[0,6,'50,000 IU'],[6,12,'100,000 IU'],[12,60,'200,000 IU']]}),'AND',R('ferrous sulphate','po* (therapeutic doses)','C E','3–6mg/kg Fe\n(usual max dose=120mg)\n(select patients max dose=200mg)','once a day','3 months',null),'AND',R('folic acid','po (therapeutic doses)','C E','<6kg=2.5mg\n>6kg=5mg','once a day','3 months',{k:'wt',b:[[0,6,'2.5 mg'],[6,999,'5 mg']]}),'AND (if positive for hookworm)',R('albendazole','po','C V','1–2yr=200mg\n>2yr=400mg','once only','',{k:'age',b:MA()})],note:'Iron supplementation is prescribed in units of elemental Fe. Ferrous sulphate suspension has 12mg elemental Fe/5mL.'},
+ {t:'g',title:'Vitamin therapy in SAM (initiate at 3 months after therapeutic dosing):',rows:['THEN',R('ferrous sulphate','po* (preventive doses)','C E','<6mnths=1mg/kg Fe\n6–<2yrs=12mg Fe\n2–<5yrs=24mg Fe\n5–12yrs=36mg Fe','once a day','3 consecutive months every year',{k:'age',b:[[0,6,'1 mg/kg Fe'],[6,24,'12 mg Fe'],[24,60,'24 mg Fe'],[60,144,'36 mg Fe','i']]}),'AND',R('folic acid','po (preventive doses)','C E','<6kg=0.2mg\n>6kg=0.4mg\nOR\n5mg','once a day (0.2mg and 0.4mg doses)\nweekly (5mg dose)','3 consecutive months every year',{k:'wt',b:[[0,6,'0.2 mg once a day'],[6,999,'0.4 mg once a day']]})],note:'Iron supplementation is prescribed in units of elemental Fe. Ferrous sulphate suspension has 12mg elemental Fe/5mL.'},
+ {t:'g',title:'Mineral therapy in SAM:',rows:[R('electrolyte mixture','po','B -','1ml/kg','4 times a day','until no oedema',{k:'mgkg',lo:1,u:'ml'}),'OR',R('potassium mixture','po','B -','1–2mmol/kg','4 times a day','until no oedema',{k:'mgkg',lo:1,hi:2,u:'mmol'})],note:'No need to give these supplements if on F-75 or F-100. For non-oedematous kwashiorkor and marasmic-kwashiorkor children, the duration is until discharge.'},
+ {t:'g',title:'Vitamin supplementation in the general paediatric population:',rows:[R('multivitamin syrup','po','B E','5–10ml','once a day','3 consecutive months every year',null),'AND',R('folic acid','po','C E','5mg','weekly','3 consecutive months every year',null),'AND',R('vitamin A','po','C V','<6mths=50,000IU\n6–12mths=100,000IU\n1–5yr=200,000IU','once at the clinic and once at home','2 doses only',{k:'age',b:[[0,6,'50,000 IU'],[6,12,'100,000 IU'],[12,60,'200,000 IU']]})]}]}
+);
+const FL=(m,d,u,lo,hi,pu)=>R(m,'','',d,'',u,{k:'mgkg',lo,hi,u:'ml',pu,mx:1e6});
+D.push(
+{id:'plan-a',name:'Plan A: treat diarrhoea at home',sec:'Diarrhoea in children',blocks:[
+ {t:'h',x:'Counsel the mother on the 3 Rules of Home Treatment'},{t:'ul',x:['Give extra fluid','Continue feeding','When to return']},{t:'p',x:'Explain function of ORT (oral rehydration therapy) to mother.'},
+ {t:'h',x:'Give extra fluid (as much as the child will take)'},{t:'p',x:'Tell the mother:'},{t:'ul',x:['Breastfeed frequently and for longer each feed.','If the child is exclusively breastfed, give Sugar Salt Solution or ORS in addition to breast milk.','If the child is not exclusively breastfed, give food-based fluids available at home.']},
+ {t:'h',x:'It is especially important to give ORT at home when the:'},{t:'ul',x:['Child has been treated with Plan B or Plan C during this visit.','Child cannot return to a clinic if the diarrhoea gets worse.']},
+ {t:'h',x:'Teach and show the mother'},{t:'ul',x:['Teach the mother how to prepare and give Sugar Salt Solution or ORS.','Explain to mother the reason for giving Oral Rehydration Therapy and what it does.','Show the mother how much Sugar Salt Solution or ORS to give.','Continue to give as much of the normal feeds as the child will take AND give Sugar Salt Solution or ORS.']},
+ {t:'g',title:'Amount to give is:',rows:[FL('ORT fluid','Child’s weight × 100 = ml to give per 24 hours','24 hours',100,0,'per 24 hours')],note:'Show mother how to measure this in a container available at home.'},
+ {t:'h',x:'Tell the mother:'},{t:'ul',x:['To give frequent small sips from a cup.','If the child vomits, wait 10 minutes. Then continue but more slowly.','To continue giving extra fluid until the diarrhoea stops.','To continue (breast) feeding.','When to return.']}]},
+{id:'plan-b',name:'Plan B: treat some dehydration with oral rehydration therapy',sec:'Diarrhoea in children',blocks:[
+ {t:'g',title:'In the health facility give approximately 75ml/kg of oral rehydration therapy over four (4) hours:',rows:[FL('Total','75ml/kg','4 hours',75,0,'in total'),FL('First hour','Start with 10ml per kg in first hour. If the child wants more oral rehydration therapy than this, give more.','1 hour',10,0,'in the first hour'),FL('After the first hour','Give 15 to 20mls per kg per hour. If the child wants and can take more oral rehydration therapy without vomiting, give more.','',15,20,'per hour')]},
+ {t:'h',x:'Show the mother how to give oral rehydration solution'},{t:'ul',x:['Give frequent small sips from a cup and spoon.','If the child vomits, wait 10 minutes, then continue, but slowly.','Continue breastfeeding or other normal feeding whenever the child wants.']},
+ {t:'h',x:'Reassess after 4 hours'},{t:'ul',x:['If no signs of dehydration: Plan A, and can send home.','If still some dehydration: Plan B, remaining in health facility.','If signs of severe dehydration: Plan C, start in health facility and refer.','Begin feeding the child if not already doing so.']},
+ {t:'h',x:'If the mother must leave before completing the treatment:'},{t:'ul',x:['Show her how to prepare Sugar Salt Solution at home.','Show her how much Sugar Salt Solution to give to finish Plan B treatment at home.','If available give 2 packets ORS sachets to prepare and give at home.','Explain to caregiver the reason for giving oral rehydration therapy and what it does.','Explain the 3 Rules of Home treatment: (1) Give extra fluid. See Plan A for recommended fluids. (2) Continue feeding and COUNSEL the mother. (3) When to return.']}]},
+{id:'plan-c',name:'Plan C: treat severe dehydration quickly',sec:'Diarrhoea in children',blocks:[
+ {t:'g',title:'Start intravenous fluid immediately:',rows:[FL('Amount of fluid','30 ml per kg body weight in 1 hour','1 hour',30,0,'in 1 hour')]},
+ {t:'p',x:'Type of fluid:'},{t:'ul',x:['Ringers lactate','OR ½ strength Darrow’s solution in 2.5% dextrose iv','OR if above unavailable 0.9% sodium chloride solution iv','If the child can drink, give oral rehydration therapy while the infusion is being set up (about 5mls per kg body weight per hour).','Caution if child malnourished or is a neonate.']},
+ {t:'h',x:'Reassess after one hour'},
+ {t:'p',x:'If response good – child regaining consciousness and radial pulses easily palpable or child passing good quantity of urine:'},
+ {t:'g',title:'Fluid volumes by weight:',rows:[FL('IV fluid if response good','Continue intravenous fluid at 10ml per kg body weight per hour for a further 5 hours (6 hours in total from the start).','5 hours',10,0,'per hour'),FL('Oral rehydration therapy','About 5mls per kg body weight per hour as soon as the child can drink.','',5,0,'per hour')]},
+ {t:'p',x:'If response poor – child remains unconscious or radial pulses weak or undetectable and no urine passed. Response may be poor if child is hypoglycaemic.'},
+ {t:'ul',x:['Repeat 30 ml per kg body weight in next hour.','Then continue intravenous fluid at 10 ml per kg body weight per hour for a further 4 hours (6 hours in total from the start).','Continue to assess hydration status and general condition hourly.']},
+ {t:'g',title:'If intravenous fluid cannot be started, give by nasogastric tube while awaiting referral:',rows:[FL('Nasogastric fluid','Give 20ml per kg body weight per hour for 6 hours.','6 hours',20,0,'per hour')],note:'Reassess hourly: if there is repeated vomiting or abdominal distension, give fluid more slowly.'},
+ {t:'h',x:'Refer urgently to hospital. Reassess hydration status 6 hours after starting fluids'},{t:'ul',x:['If no signs of dehydration: Plan A.','If still some signs of dehydration: Plan B remaining in health facility.','If signs of severe dehydration: Plan C and refer urgently to hospital.','Begin feeding the child if not already doing so.']},
+ {t:'p',x:'Child should be referred urgently to hospital if at any time assessment shows poor response.'}]}
+);
+const MM=(title,cols,rows,note,li)=>({t:'m',title,cols,rows,note,li});
+D.push(
+{id:'mal-classify',name:'Acute malnutrition: classification',sec:'Acute malnutrition',blocks:[
+ MM('Classification of acute malnutrition in children',['Age group','Measurement index','Severe acute malnutrition','Moderate acute malnutrition'],[
+ [['Children less than 6 months'],['Classify severe if presence of any of the following:','• Bilateral pitting oedema','• Weight for length < −3 SD (WHO)','• Mid-upper arm circumference (MUAC) < 110 mm','• Infant too weak to suckle effectively leading to poor intake','• Mother reports insufficient milk to feed child AND child is not gaining weight'],[''],['']],
+ [['Children 6 to 59 months'],['Weight for height'],['< −3 SD (WHO)'],['≥ −3 and < −2 SD (WHO)']],
+ [[''],['Mid-upper arm circumference (MUAC)'],['< 115 mm'],['≥ 115 mm and < 125 mm']],
+ [[''],['Bilateral pitting oedema'],['Yes'],['No']],
+ [['Children and adolescents (5 to 18 years)'],['Body Mass Index (BMI) for age'],['< −3 SD (WHO) OR visible wasting'],['≥ −3 and < −2 SD (WHO)']],
+ [[''],['Bilateral pitting oedema'],['Yes'],['No']]],'',0)]},
+{id:'mal-feeding',name:'Acute malnutrition: therapeutic feeding and rehabilitation',sec:'Acute malnutrition',blocks:[
+ {t:'h',x:'Nutritional rehabilitation at the referral level: general guidelines'},
+ {t:'ul',x:['Keep malnourished children in a special area where they can be constantly monitored.','Malnourished children should be isolated from other patients because they are very susceptible to infection.','Try not to separate the caregiver from the child; they should share a bed where possible.','Keep the child in a warm environment. Properly cover the child with clothes, including a hat, and blankets. The child must be dried immediately and properly after bathing. Bath time should be minimal and, done during the day.','Attempt to incorporate an educational message into each intervention.','Intravenous infusions should be avoided except when essential, as for severe dehydration with shock or septic shock.','Intramuscular injections should be given with care in the thigh, using the smallest possible gauge needle and volume of fluid.','The room temperature should be kept at 28-32 degrees Celsius. This will seem uncomfortably warm for active, fully clothed staff, but is necessary for small, immobile children who easily become hypothermic.','Those children who do not need emergency treatment for complications should be admitted directly to outpatient therapeutic programme (OTP) and started on Ready to Use (RTU) feed e.g. plumpy nut, as soon as possible (refer to nutrition guidelines).']},
+ {t:'h',x:'Therapeutic feeding'},
+ {t:'p',x:'The therapeutic diet for malnourished children consists of two formulas, F-75 and F-100 or Ready to use Therapeutic Food (RUTF). F-75 (75 kcal/100 ml) is used during the initial phase of treatment, while F-100 or RUTF (100 kcal/100 ml) is used during the rehabilitation phase, after the appetite has returned.'},
+ {t:'g',title:'Daily feed volumes by weight:',rows:[FL('F-75 / diluted F-100 (Phase 1)','130 ml/kg/day','',130,0,'per day'),FL('F-75 with gross oedema or after shock','100 ml/kg/day','',100,0,'per day'),FL('F-100 (Phase 2, 6 to 59 months)','150 ml/kg/day','',150,0,'per day')]},
+ {t:'h',x:'Important notes about Phase 1'},
+ {t:'ul',x:['Diluted F-100 (aka modified F-100) is prepared in a manner that mimics breastmilk calories (i.e. 70kcal/mL).','Prepare 100mL by mixing 70mL of F-100 with sterile water.','F-100 contains 100 kcal and 2.9 g protein/100 ml.','F-75 contains 75 kcal and 0.9 g protein/100 ml.','F-75 formula as given above provides 130ml/kg/day.','If there is gross oedema (involves lower limbs, upper limbs and face) or the child has been managed for shock, reduce the volume to 100 ml/kg/day.','Give feeds from a cup or from a spoon, dropper or syringe if the child is very weak to feed.','If the appetite is poor, coax and encourage the patient to finish the feed.','If intake does not reach 75% of prescribed amount despite frequent feeds, coaxing and re-offering, use a nasogastric tube.','If the child is breastfed, encourage continued breastfeeding but also give prescribed amounts of feeds to make sure the child’s needs are met.','In children ≥6 months, switch to F-100 formula as soon as appetite has returned (usually within 7 days) and oedema has started subsiding.','To change from F-75 to F-100 formula replace F-75 with the same amount of F-100 for 48 hours then, increase each successive feed by 10 ml until some feed remains uneaten. The point when some remains unconsumed is likely to occur when intakes reach about 30 ml/kg/feed (200 ml/kg/d).']},
+ MM('Inpatient therapeutic feeding recommendations: Phase 1 (stabilisation care)',['Age group','Product and prescription'],[[['Children <6 months'],['• Give Diluted F-100 at 130 ml/kg of body weight per day','• Breastfed children should always be offered breast milk before the therapeutic milk, and always on demand']],[['Children 6 to 59 months'],['• Give F-75 at 130 ml per kg of body weight per day until the patient re-gains appetite.','• Start with 2 hourly feeds (12 feeds per day), and gradually decrease the frequency of feeding and increase the volume of each feed until the patient is getting 3-hourly feeds (8 feeds per day)']]],'',0),
+ {t:'h',x:'Important notes about Phase 2'},
+ {t:'ul',x:['Readiness to enter the rehabilitation phase is signaled by a return of appetite, usually about one week after admission.','A gradual transition is recommended to avoid the risk of heart failure which can occur if children suddenly consume huge amounts.','A vigorous approach to feeding is required to achieve very high intakes and rapid weight gain of >10 g gain/kg/day.','The recommended milk-based F-100 contains 100 kcal and 2.9 g protein/100 ml.','If gross oedema (lower limbs, upper limbs and face) returns, or the child has been managed for shock, return to Phase 1 feeding at 100 ml/kg/day. Otherwise give F-100 at 150 ml/kg/day and increase each feed to meet the child’s appetite.','F-100 can be replaced by an alternative Ready-to-use therapeutic food (RUTF) once the appetite has returned.'],d:'mal-p2'},
+ MM('Inpatient therapeutic feeding recommendations: Phase 2 (transition and rehabilitation)',['Age group','Product and prescription'],[[['Children <6 months'],['• Give twice the volume offered during Phase 1']],[['Children 6 to 59 months'],['• Replace F-75 with F-100 at 150 ml per kg of body weight per day','• Gradually introduce RUTF in small amounts until the child can consume ¾ sachet per day','• When accepted, provide RUTF at 130 kcal per kg of body weight per day']]],'',0),
+ {t:'p',x:'If commercial formulas F-75 and F-100 are not available, prepare as follows. DO NOT USE HIGH ENERGY MILK. For alternate ingredients refer to Protocol for management of acute malnutrition.'},
+ MM('F-75 and F-100 recipes',['Ingredient','F-75','F-100'],[[['Fresh cow’s milk'],['300 ml'],['900 ml']],[['Sugar'],['100 g'],['50 g']],[['Vegetable oil'],['20 ml'],['25 ml']],[['Vitamin & mineral mix (CMV)'],['3 g (½ scoop)'],['3 g (½ scoop)']],[['Add water to make'],['1000 ml'],['1000 ml']]],'',0),
+ MM('ReSoMal recipe',['Ingredient','Amount'],[[['Water (boiled & cooled)'],['2 litres']],[['WHO-ORS'],['One 1-litre packet*']],[['Sugar'],['50 g']],[['Combined vitamin and mineral mix (CMV)*'],['3 g']]],'',0),
+ {t:'h',x:'Home management'},
+ {t:'ul',x:['Regularly monitor child’s weight: For children less than 1year old monitor weight every month and for those 1year and above, check weight every 2 months.','Encourage exclusive breastfeeding up to 6 months (no additional fluids/foods), introducing other foods in addition to breast milk at 6 months, and breastfeeding up to two years. For young children, continue breastfeeding on demand.','RUTF is a food and medicine for children with Severe acute malnutrition. (SAM)- oedematous and non oedematous (Kwashiorkor or Marasmus) only. It should not be shared.','Children with SAM (Kwashiorkor or Marasmus) often do not like to eat. Give small regular meals of RUTF and encourage the child to eat often (if possible eight meals a day).','Always offer the child plenty of cooled, boiled water to drink while he or she is eating RUTF.','Keep food clean and covered. Hygienic food handling and preparation. Use soap to wash children’s hands and face before feeding. Wash hands with soap and water after visiting the toilet.','Children with SAM (Kwashiorkor or Marasmus) get cold quickly. Always keep the child covered and warm.','When a child has diarrhoea, never stop feeding. Give extra food and extra clean water.','As soon as the child gets better, introduce the fortified, family type diet.']}]}
+);
+const CHG=[
+{id:'age-12',w:'Prednisolone and salbutamol (nebulized): child aged exactly 12 months',p:'Bands read “<1yr” and “>1yr”, so a child of exactly 12 months falls in neither.',a:'12 months is included in the upper band.',y:'Every age needs a dose; the boundary age belongs to the upper band.',err:1},
+{id:'amox-19',w:'Amoxicillin by weight: above 19 kg',p:'Bands stop at 19 kg with no instruction for heavier children.',a:'The calculator refers to adult dosing above 19 kg (same rule wherever paediatric bands end).',y:'Paediatric bands end where adult dosing is assumed; “not covered” would not be true.',err:1},
+{id:'ear-freq',w:'Acute ear infection: amoxicillin frequency',p:'12 hourly',a:'3 times a day',y:'Standard amoxicillin frequency; matches the same weight bands under pneumonia.',err:1},
+{id:'mast-dur',w:'Mastoiditis: gentamicin duration',p:'No duration given.',a:'treat to effect',y:'Editor’s decision.',err:1},
+{id:'ss-age',w:'Sore throat: antibiotic heading',p:'(age > 2 years)',a:'(all ages)',y:'The heading did not match the dose table, which starts under 1 year.',err:1},
+{id:'band-edge',w:'Overlapping age bands (for example 1 – 3yrs and 3 – 5yrs)',p:'Neighbouring bands share the boundary value.',a:'The lower band ends just below the boundary; the boundary age or weight belongs to the upper band.',y:'Avoids two possible doses at the same age.',err:1},
+{id:'croup-alt',w:'Severe croup: antibiotic choice',p:'Text names cloxacillin and chloramphenicol; the table lists chloramphenicol OR ceftriaxone, AND cloxacillin.',a:'Table unchanged. Note added: chloramphenicol is preferred, ceftriaxone is the alternative where it is not available.',y:'The text gives the ideal; the table reflects what is available in Zimbabwe.',err:0},
+{id:'persist-14',w:'Diarrhoea prevention list: persistent diarrhoea',p:'lasting > 14 days',a:'lasting ≥ 14 days',y:'Matches the definition of persistent diarrhoea (14 days or more).',err:1},
+{id:'nal-age',w:'Nalidixic acid dosing',p:'Mixed weight bands (4–<10kg 125mg, >10kg 250mg) and age bands (5–12yrs 375mg, >12yrs 500mg).',a:'Age bands only: <1yr 62.5mg, 1 – <5yrs 125mg, 5 – <10yrs 250mg, 10 – 17yrs 375mg.',y:'Editor’s decision: the print mixed weight and age and the bands overlapped.',err:1},
+{id:'zinc-cf',w:'Zinc sulphate: codes and frequency',p:'No codes or frequency shown; dose written as mg/day.',a:'Codes C V; frequency once a day.',y:'Supplied by the editor.',err:1},
+{id:'fa-freq',w:'Preventive folic acid after SAM: frequency',p:'“once a day weekly”',a:'Once a day for the 0.2mg and 0.4mg doses; weekly for the 5mg dose.',y:'The “OR” separates two regimens; the print’s frequency read as contradictory (document issue).',err:1},
+{id:'gent-mal',w:'Severe malnutrition: gentamicin dose',p:'7.5mg/kg',a:'5–7mg/kg',y:'Matches the usual gentamicin dose elsewhere in the chapter.',err:1},
+{id:'mal-p2',w:'Acute malnutrition, Phase 2 notes: feeding volume',p:'“If there is gross oedema (involves lower limbs, upper limbs and face) or the child has been managed for shock, reduce the volume to 100 ml/kg/day.” (repeated from Phase 1; Phase 2 prescribes 150 ml/kg/day)',a:'If gross oedema (lower limbs, upper limbs and face) returns, or the child has been managed for shock, return to Phase 1 feeding at 100 ml/kg/day. Otherwise give F-100 at 150 ml/kg/day and increase each feed to meet the child’s appetite.',y:'The print repeated the Phase 1 sentence. Children can move back to Phase 1 if oedema returns, while others need higher volumes to meet their appetite.',err:1},
+{id:'fmt',w:'Spelling and formatting (no marker shown)',p:'Mixed forms such as 6hrly, 6hourly, 24hrly, 10days; stray characters inside some dose ranges.',a:'Standard forms such as 6 hourly, 24 hourly, 10 days; ranges cleaned. Doses unchanged.',y:'Consistency.',err:0}];
+D.forEach(c=>c.blocks.forEach(b=>(b.rows||[]).forEach(r=>{if(typeof r=='string')return;const x=[];
+ if(r.m=='prednisolone'||(r.m=='salbutamol'&&r.r[0]=='n'))x.push('age-12');
+ if(r.m=='amoxicillin'&&r.c&&r.c.k=='wt')x.push('amox-19');
+ if(r.c&&r.c.b&&r.c.b.some(q=>q[0]==36))x.push('band-edge');
+ if(c.id=='ear'&&r.m=='amoxicillin')x.push('ear-freq');
+ if(c.id=='ear'&&r.m=='gentamicin')x.push('mast-dur');
+ if(r.m=='nalidixic acid')x.push('nal-age');
+ if(r.m=='zinc sulphate')x.push('zinc-cf');
+ if(c.id=='mal-hypo'&&r.m=='gentamicin')x.push('gent-mal');
+ if(r.m=='folic acid'&&r.d.includes('OR'))x.push('fa-freq');
+ if(x.length)r.x=x})));
+function mtx(b){return `<div class="bar">${e(b.title)}</div><div class="wrap"><table><tr>${b.cols.map(c=>`<th>${c}</th>`).join('')}</tr>${b.rows.map(r=>`<tr>${r.map((c,i)=>`<td class="${i==(b.li??1)?'l':''}">${c.map(s=>s.startsWith('**')?`<div><b>${e(s.slice(2))}</b></div>`:`<div>${e(s)}</div>`).join('')}</td>`).join('')}</tr>`).join('')}</table></div>${b.note?`<div class="note"><i>${e(b.note)}</i></div>`:''}<p class="src">Source: ${SRC}</p>`}
+const VER='0.6',VDATE='9 November 2026';
+const FT=`clíckā-ai v${VER} · content updated ${VDATE} · Higher Health. Confirm doses against the source before clinical use.`;
+const DIS=[['For licensed health professionals only.','This app is a quick-reference aid. It does not replace clinical judgement, local protocols, or the official printed reference it draws from.'],['Check before you prescribe.','Doses and advice are taken from EDLIZ 2025 and may contain errors or may have changed since publication. Calculated doses are a convenience only. Always confirm the dose against the source and the patient’s condition (weight, age, kidney and liver function, allergies, other medicines) before use.'],['Differences from print.','Where this app differs from the printed source, the item is marked “differs from print” and listed in the Corrections log.'],['Estimated weight.','If the weight is estimated from age, the figure comes from WHO population weight-for-age lines (about right for age, or small for age as selected by the clinician) and may be wrong for an individual child, particularly one who is malnourished, oedematous, obese or unusually tall or short. Measure the weight whenever possible.'],['No emergency use.','The app is not for diagnosis in emergencies. In an emergency follow your facility’s protocols and seek senior help.'],['Source.','Content is drawn from EDLIZ 2025. This app is an independent work by Higher Health and is not an official publication of the EDLIZ owners.'],['Liability.','To the extent the law allows, the developer accepts no liability for harm arising from use of this app.'],['Version.',`Version ${VER}, content last updated ${VDATE}. Publisher: Higher Health. Contact: destaks1@gmail.com.`]];
+function aboutv(){document.getElementById('app').innerHTML=`<button class="back" onclick="location.hash=''">← All conditions</button><h1 class="bar">About clíckā-ai</h1>`+DIS.map(d=>`<p><b>${e(d[0])}</b> ${e(d[1])}</p>`).join('')+`<button class="item" onclick="location.hash='log'"><b>Corrections log</b><small>Where this app differs from the print</small></button>`;scrollTo(0,0)}
+function ack(go){try{localStorage.setItem('ok1','1')}catch(x){}document.getElementById('dg').close();if(go)location.hash='about'}
+function first(){try{if(localStorage.getItem('ok1'))return}catch(x){}const g=document.getElementById('dg');g.innerHTML=`<b>${e(DIS[0][0])}</b><p>${e(DIS[1][0])} ${e(DIS[1][1])}</p><button class="dx" onclick="ack(0)">I understand</button><button class="dx" onclick="ack(1)">Read full disclaimer</button>`;g.addEventListener('cancel',ev=>ev.preventDefault(),{once:true});g.showModal()}
+let NOEST=false;
+function west(m){if(m==null||m<0||m>120)return null;if(m>60)return(0.00109386911*m+0.0219087762)*m+13.0570589;return m<12?((0.00336538*m-0.09818931)*m+1.19606019)*m+3.26964286:m<36?0.20153846*m+6.93907692:0.17426923*m+7.83107692}
+const RZ=[[-1.521965,5.8252266,-8.786076,6.5241291,-2.4279036,0.36623909,0.8731688],[-4.0125197,14.794505,-21.523885,15.431121,-5.5277306,0.81731826,0.75794293],[-7.5336976,26.96729,-37.976186,26.323971,-9.1280713,1.3437898,0.64709373]];
+let EST=[];
+const LV=['Looks about right for age','A bit small for age (about \u22121 SD)','Small for age (about \u22122 SD)','Very small, thin or wasted (about \u22123 SD)'];
+function lines(m){const w=west(m),x=m/120;return [w].concat(RZ.map(c=>w*c.reduce((a,b)=>a*x+b)))}
+function enote(t){const n=document.getElementById('em');n.style.display='block';n.textContent=t}
+function showEst(){const n=document.getElementById('em'),w=P.w,e=EST,i=P.lv,f=v=>(Math.round(v*10)/10).toFixed(1);let r;if(i==0)r='typical range about '+f(w*0.74)+'\u2013'+f(w*(1.35+(P.a>60?(P.a-60)*0.0023333:0)))+' kg';else if(i==3)r='it may be lower still';else r='range about '+f(e[i+1])+'\u2013'+f(e[i-1])+' kg';n.style.display='block';n.innerHTML='<b>Estimated weight: '+w.toFixed(1)+' kg</b>, '+LV[i].charAt(0).toLowerCase()+LV[i].slice(1)+' ('+r+'). Based on WHO weight-for-age lines for boys and girls combined (growth standards to 5 years, 2007 reference from 5 to 10 years). Not valid for oedematous children.'+(i>=2?' A child this small may have acute malnutrition: measure the weight and mid-upper arm circumference as soon as you can.':' Measure the weight as soon as you can.')}
+function pickW(i){document.getElementById('dg').close();P.lv=i;P.w=Math.round(EST[i]*10)/10;P.est=true;document.getElementById('w').value=P.w;showEst();upd()}
+function estW(){const g=document.getElementById('dg'),clr=()=>{if(P.est){P.w=null;document.getElementById('w').value=''}P.est=false;upd()};if(P.a==null){clr();enote('Enter the child\u2019s age first.');return}if(west(P.a)==null){clr();enote('Estimation covers birth to 10 years (120 months). For older children please measure the weight.');return}EST=lines(P.a);g.innerHTML='<b>Does the child look small for age?</b><p>Tap the weight that best fits how the child looks. If you are unsure, measure the weight.</p>'+EST.map((v,i)=>'<button class="item" onclick="pickW('+i+')"><b>'+(Math.round(v*10)/10).toFixed(1)+' kg</b><small>'+LV[i]+'</small></button>').join('')+'<button class="dx" onclick="document.getElementById(\'dg\').close()">Cancel</button>';g.showModal()}
+function setP(src){setP0();if(src&&P.est){P.w=null;document.getElementById('w').value='';P.est=false;upd();if(P.a!=null)enote('Age changed: tap \u201cEstimate weight from age\u201d again.');else document.getElementById('em').style.display='none'}}
+const bdg=k=>`<button class="dx" onclick="dx('${k}')">≠ differs from print</button>`;
+function dx(id){const c=CHG.find(z=>z.id==id),g=document.getElementById('dg');g.innerHTML=`<b>${e(c.w)}</b><p><u>EDLIZ print:</u> ${e(c.p)}</p><p><u>This app:</u> ${e(c.a)}</p><p><u>Why:</u> ${e(c.y)}</p>${c.err?'<p><i>Listed for errata.</i></p>':''}<button class="dx" onclick="document.getElementById('dg').close()">Close</button>`;g.showModal()}
+function logv(){document.getElementById('app').innerHTML=`<button class="back" onclick="location.hash=''">← All conditions</button><h1 class="bar">Corrections log</h1><p class="src">Where this app differs from the EDLIZ 2025 print. “Errata” marks items to report to the EDLIZ owners.</p>`+CHG.map(c=>`<div class="note"><b>${e(c.w)}</b>${c.err?' · <u>Errata</u>':''}<br>Print: ${e(c.p)}<br>App: ${e(c.a)}<br><i>${e(c.y)}</i></div>`).join('');scrollTo(0,0)}
+const P={w:null,a:null};const REG=[];
+const e=s=>String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+const fmt=(n,dp)=>dp?n.toFixed(dp).replace(/0+$/,"").replace(/\.$/,""):String(Math.round(n*10)/10);
+function calc(c){
+ if(c.k=="mgkg"){if(!P.w)return"";if(c.ab){if(P.a==null)return"";const q=c.ab.find(z=>P.a>=z[0]&&P.a<z[1]);if(!q)return P.a>=c.ab[c.ab.length-1][1]?"Above the book’s paediatric ages – use adult dosing":"Below the book’s ages – check the source";return`→ ${fmt(Math.min(q[2]*P.w,c.mx||1e9))} ${c.u} per dose (max ${c.mx} mg)`}if(P.w>40&&!c.mx)return"Above 40 kg: do not exceed the adult dose – use the adult dose.";
+  const a=fmt(Math.min(c.lo*P.w,c.mx||1e9),c.dp),b=c.hi?"–"+fmt(c.hi*P.w,c.dp):"";return`→ ${a}${b} ${c.u} ${c.pu||'per dose'}`}
+ if(!c.b)return"";const x=c.k=="wt"?P.w:P.a;if(x==null)return"";
+ const m=c.b.find(([lo,hi,,f=""])=>(f.includes("o")?x>lo:x>=lo)&&(f.includes("i")?x<=hi:x<hi));
+ if(m)return`→ ${m[2]}`;return x>=c.b[c.b.length-1][1]?"Above the book’s paediatric bands – use adult dosing":"Below the book’s bands – check the source";}
+function upd(){document.querySelectorAll("[data-i]").forEach(s=>{const c=REG[s.dataset.i],wt=c.k=='mgkg'||c.k=='wt';if(P.est&&NOEST&&wt){s.textContent='Measure the child’s weight – an estimated weight is not valid in malnutrition.';return}const t=calc(c);s.textContent=(P.est&&wt&&t[0]=='→')?t.replace('→','→ ≈')+' (estimated weight)':t})}
+function setP0(){const w=parseFloat(document.getElementById("w").value),a=parseFloat(document.getElementById("a").value),u=document.getElementById("u").value;
+ P.w=w>0&&w<=150?w:null;P.a=a>=0&&a<=216?(u=="y"?a*12:a):null;if(isNaN(a))P.a=null;upd()}
+function grp(b){let h=`<div class="bar">${e(b.title)}</div><div class="wrap"><table><tr>${H.map(x=>`<th>${x}</th>`).join("")}</tr>`;
+ b.rows.forEach(r=>{if(typeof r=="string")return h+=`<tr><td class="sep" colspan="5">${r}</td></tr>`;
+  const i=REG.push(r.c||{k:"-"})-1;
+  h+=`<tr><td class="l">${e(r.m+(r.r?" "+r.r:""))}</td><td>${e(r.k)}</td><td class="d">${e(r.d)}<span class="calc" data-i="${i}"></span>${(r.x||[]).map(bdg).join("")}</td><td>${e(r.f)}</td><td>${e(r.u)}</td></tr>`});
+ return h+`</table></div>`+(b.note?`<div class="note"><i>Note: ${e(b.note)}</i> ${b.d?bdg(b.d):""}</div>`:"")+`<p class="src">Source: ${SRC}</p>`}
+const txt=c=>(c.name+" "+JSON.stringify(c.blocks)).toLowerCase();
+function list(q){const r=D.filter(c=>txt(c).includes(q.toLowerCase()));
+ return r.length?r.map(c=>`<button class="item" onclick="location.hash='${c.id}'"><b>${c.name}</b><small>${c.sec}</small></button>`).join(""):`<p>No matches.</p>`}
+function home(){document.getElementById("app").innerHTML=`<h1 class="bar">clíckā-ai</h1><p class="src">Paediatric conditions reference for health professionals</p><input id="q" type="search" placeholder="Search condition or medicine" oninput="document.getElementById('res').innerHTML=list(this.value)"><div id="res">${list("")}</div><button class="item" onclick="location.hash='log'"><b>Corrections log</b><small>Where this app differs from the EDLIZ 2025 print, and why</small></button><button class="item" onclick="location.hash='about'"><b>About and disclaimer</b><small>For licensed health professionals only</small></button><p class="ft">${FT}</p>`}
+function view(c){REG.length=0;NOEST=c.id.startsWith('mal-');
+ const body=c.blocks.map(b=>b.t=="h"?`<h3>${e(b.x)} ${b.d?bdg(b.d):""}</h3>`:b.t=="p"?`<p>${e(b.x)}</p>`:b.t=="ul"?`<ul>${b.x.map(i=>`<li>${e(i)}</li>`).join("")}</ul>${b.d?bdg(b.d):""}`:b.t=="m"?mtx(b):grp(b)).join("");
+ document.getElementById("app").innerHTML=`<button class="back" onclick="location.hash=''">← All conditions</button><h1 class="bar">${c.name}</h1>
+ <div class="pt"><b>Patient (for calculated doses)</b><input id="w" type="number" inputmode="decimal" placeholder="Weight kg" oninput="P.est=false;document.getElementById('em').style.display='none';setP()"><input id="a" type="number" inputmode="decimal" placeholder="Age" oninput="setP(1)"><select id="u" onchange="setP(1)"><option value="m">months</option><option value="y">years</option></select><button class="dx" onclick="estW()">Estimate weight from age</button></div><div id="em" class="note" style="display:none"></div>
+ <p class="src">Doses by weight are per dose, up to 40 kg; do not exceed the adult dose. The book’s wording is always shown above the calculated figure.</p>`+body+`<p class="ft">${FT}</p>`;
+ if(P.w)document.getElementById("w").value=P.w;if(P.a!=null)document.getElementById("a").value=P.a;if(P.est&&P.w)showEst();scrollTo(0,0);upd()}
+function route(){if(location.hash=='#about')return aboutv();if(location.hash=='#log')return logv();const c=D.find(x=>x.id==location.hash.slice(1));c?view(c):home()}
+addEventListener("hashchange",route);route();first();
+</script><script>if('serviceWorker' in navigator)addEventListener('load',()=>navigator.serviceWorker.register('sw.js').catch(()=>{}));</script>
+</body></html>
