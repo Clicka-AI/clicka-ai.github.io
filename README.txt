@@ -4,7 +4,7 @@ WHAT IS IN THIS FOLDER
 index.html            the whole app (all content is inside this one file)
 sw.js                 makes it work offline
 manifest.webmanifest  lets phones install it like an app
-icon-192.png, icon-512.png, apple-touch-icon.png   app icons (placeholders, replace with your own)
+icon-192.png, icon-512.png, maskable-512.png, apple-touch-icon.png, favicon-32.png, favicon-48.png   the clicka.ai app icons
 
 1. PUT IT ONLINE (needed once, requires https)
 Upload the whole folder to any free static host, for example:
@@ -18,7 +18,7 @@ iPhone (Safari only): Share button > Add to Home Screen.
 After the first visit it opens and works with no signal.
 
 3. UPDATING THE CONTENT
-After any change to index.html, open sw.js and change 'paeds-v15' to 'paeds-v16' (then v3, and so on), then upload the folder again. Phones update the next time they open the app with internet.
+After any change to index.html, open sw.js and change 'paeds-v16' to 'paeds-v17' (then v3, and so on), then upload the folder again. Phones update the next time they open the app with internet.
 
 4. STORES (later)
 Google Play: go to pwabuilder.com, enter your web address, download the Android package. Needs a Play developer account ($25 once).
