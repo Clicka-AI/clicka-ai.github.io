@@ -1,7 +1,8 @@
 CLICKA.AI: INSTALL AND PUBLISH GUIDE (Higher Health)
 
 WHAT IS IN THIS FOLDER
-index.html            the whole app (all content is inside this one file)
+index.html            the app (all text content is inside this one file)
+fig/                  the figures (neonatal charts and algorithms), saved for offline use
 sw.js                 makes it work offline
 manifest.webmanifest  lets phones install it like an app
 icon-192.png, icon-512.png, maskable-512.png, apple-touch-icon.png, favicon-32.png, favicon-48.png   the clicka.ai app icons
@@ -18,7 +19,7 @@ iPhone (Safari only): Share button > Add to Home Screen.
 After the first visit it opens and works with no signal.
 
 3. UPDATING THE CONTENT
-After any change to index.html, open sw.js and change 'paeds-v19' to 'paeds-v20' (then v3, and so on), then upload the folder again. Phones update the next time they open the app with internet.
+After any change to index.html, open sw.js and change 'paeds-v20' to 'paeds-v21' (then v22, and so on), then upload the folder again. Phones update the next time they open the app with internet.
 
 4. STORES (later)
 Google Play: go to pwabuilder.com, enter your web address, download the Android package. Needs a Play developer account ($25 once).
