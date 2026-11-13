@@ -19,7 +19,7 @@ iPhone (Safari only): Share button > Add to Home Screen.
 After the first visit it opens and works with no signal.
 
 3. UPDATING THE CONTENT
-After any change to index.html, open sw.js and change 'paeds-v27' to 'paeds-v28' (then v29, and so on), then upload the folder again. Phones update the next time they open the app with internet.
+After any change to index.html, open sw.js and change 'paeds-v28' to 'paeds-v29' (then v30, and so on), then upload the folder again. Phones update the next time they open the app with internet.
 
 4. STORES (later)
 Google Play: go to pwabuilder.com, enter your web address, download the Android package. Needs a Play developer account ($25 once).
